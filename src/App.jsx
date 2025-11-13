@@ -97,9 +97,13 @@ function App() {
       const arrayBuffer = await file.arrayBuffer();
 
       // 2. Original-PDF mit pdf-lib laden
-      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      // --- START KORREKTUR V4: Verschlüsselung ignorieren ---
+      const pdfDoc = await PDFDocument.load(arrayBuffer, { 
+        ignoreEncryption: true 
+      });
+      // --- ENDE KORREKTUR V4 ---
 
-      // --- KORRIGIERTER FORMULAR-SCHRITT (Bleibt wichtig) ---
+      // --- FORMULAR-SCHRITT (Bleibt wichtig) ---
       const form = pdfDoc.getForm();
 
       // 2a. Prüfen auf XFA (nicht unterstützt)
@@ -134,15 +138,11 @@ function App() {
       
       setPageInfo({ original: originalPageCount, added: pagesToAdd });
 
-      // 5. Bestehende Seiten auf A5 skalieren (NEUE LOGIK)
+      // 5. Bestehende Seiten auf A5 skalieren
       const a5Width = PageSizes.A5[0];
       const a5Height = PageSizes.A5[1];
 
-      // --- START KORREKTUR: Seiten einzeln verarbeiten ---
-      
-      // 'embedPages' (alle auf einmal) entfernen, da es bei leeren Seiten fehlschlägt
-      // const embeddedPages = await newPdfDoc.embedPages(originalPages); // <-- DIESE ZEILE IST JETZT WEG
-
+      // --- START KORREKTUR V3: try...catch pro Seite ---
       // Jede Seite einzeln durchgehen, einbetten und zeichnen
       for (let i = 0; i < originalPageCount; i++) {
         const originalPage = originalPages[i];
@@ -150,14 +150,11 @@ function App() {
         // Erstelle *immer* eine neue A5-Seite, um die Reihenfolge beizubehalten
         const newPage = newPdfDoc.addPage(PageSizes.A5);
 
-        // Prüfen, ob die Originalseite überhaupt Inhalt hat.
-        // Dein Fehler "missing Contents" wird hiermit abgefangen.
-        if (originalPage.node.Contents) { 
-          
-          // Nur diese eine Seite einbetten, da sie Inhalt hat
+        try {
+          // Versuche, die Seite einzubetten
           const embeddedPage = await newPdfDoc.embedPage(originalPage);
 
-          // Skalierungslogik wie vorher
+          // Skalierungslogik
           const { width, height } = originalPage.getSize();
           const scale = Math.min(a5Width / width, a5Height / height);
           const scaledWidth = width * scale;
@@ -172,12 +169,14 @@ function App() {
             width: scaledWidth,
             height: scaledHeight,
           });
-        }
-        // else: Wenn die originalPage.node.Contents leer ist,
-        // bleibt die 'newPage' einfach leer. Kein Absturz mehr.
-      }
-      // --- ENDE KORREKTUR ---
 
+        } catch (embedError) {
+          // Fange den "missing Contents" Fehler (und andere) HIER ab
+          console.warn(`Seite ${i + 1} konnte nicht eingebettet werden (wahrscheinlich leer):`, embedError.message);
+          // Die 'newPage' bleibt in diesem Fall einfach leer, aber die Schleife läuft weiter.
+        }
+      }
+      // --- ENDE KORREKTUR V3 ---
 
       // 6. Leere A5-Seiten hinzufügen (wie vorher)
       for (let i = 0; i < pagesToAdd; i++) {
@@ -194,7 +193,7 @@ function App() {
 
     } catch (err) {
       console.error(err);
-      // Dieser Block fängt jetzt alle anderen Fehler ab
+      // Dieser Block fängt jetzt nur noch fatale Ladefehler ab
       setError('Fehler bei der PDF-Verarbeitung. Die Datei ist möglicherweise beschädigt oder das Format wird nicht unterstützt.');
     } finally {
       setProcessing(false);
