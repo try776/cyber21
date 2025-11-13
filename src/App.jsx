@@ -99,7 +99,7 @@ function App() {
       // 2. Original-PDF mit pdf-lib laden
       const pdfDoc = await PDFDocument.load(arrayBuffer);
 
-      // --- KORRIGIERTER FORMULAR-SCHRITT ---
+      // --- KORRIGIERTER FORMULAR-SCHRITT (Bleibt wichtig) ---
       const form = pdfDoc.getForm();
 
       // 2a. Prüfen auf XFA (nicht unterstützt)
@@ -111,20 +111,16 @@ function App() {
 
       // 2b. Versuchen, AcroForm-Felder flachzudrücken
       try {
-        // Nur ausführen, wenn es überhaupt Felder gibt
         if (form.getFields().length > 0) {
             form.flatten();
         }
       } catch (flattenError) {
-        // --- WICHTIGE ÄNDERUNG ---
-        // Wenn das Flachdrücken fehlschlägt, ist das ein fataler Fehler.
-        // Wir müssen hier abbrechen, anstatt weiterzumachen.
         console.error('Fehler beim Flachdrücken des Formulars:', flattenError);
         setError('Fehler: Das PDF-Formular konnte nicht verarbeitet werden. Es ist möglicherweise beschädigt oder enthält nicht unterstützte Feldtypen.');
         setProcessing(false);
-        return; // <-- Verarbeitung hier stoppen!
+        return;
       }
-      // --- ENDE KORRIGIERTER SCHRITT ---
+      // --- ENDE FORMULAR-SCHRITT ---
 
       const originalPages = pdfDoc.getPages();
       const originalPageCount = originalPages.length;
@@ -138,39 +134,52 @@ function App() {
       
       setPageInfo({ original: originalPageCount, added: pagesToAdd });
 
-      // 5. Bestehende Seiten auf A5 skalieren
+      // 5. Bestehende Seiten auf A5 skalieren (NEUE LOGIK)
       const a5Width = PageSizes.A5[0];
       const a5Height = PageSizes.A5[1];
 
-      // Alle Seiten auf einmal in das neue Dokument einbetten
-      const embeddedPages = await newPdfDoc.embedPages(originalPages); 
+      // --- START KORREKTUR: Seiten einzeln verarbeiten ---
+      
+      // 'embedPages' (alle auf einmal) entfernen, da es bei leeren Seiten fehlschlägt
+      // const embeddedPages = await newPdfDoc.embedPages(originalPages); // <-- DIESE ZEILE IST JETZT WEG
 
-      // Jede eingebettete Seite auf eine neue A5-Seite zeichnen
+      // Jede Seite einzeln durchgehen, einbetten und zeichnen
       for (let i = 0; i < originalPageCount; i++) {
         const originalPage = originalPages[i];
-        const embeddedPage = embeddedPages[i];
         
-        const { width, height } = originalPage.getSize();
-        
-        const scale = Math.min(a5Width / width, a5Height / height);
-        
-        const scaledWidth = width * scale;
-        const scaledHeight = height * scale;
-
-        const x = (a5Width - scaledWidth) / 2;
-        const y = (a5Height - scaledHeight) / 2;
-
+        // Erstelle *immer* eine neue A5-Seite, um die Reihenfolge beizubehalten
         const newPage = newPdfDoc.addPage(PageSizes.A5);
-        
-        newPage.drawPage(embeddedPage, {
-          x,
-          y,
-          width: scaledWidth,
-          height: scaledHeight,
-        });
-      }
 
-      // 6. Leere A5-Seiten hinzufügen
+        // Prüfen, ob die Originalseite überhaupt Inhalt hat.
+        // Dein Fehler "missing Contents" wird hiermit abgefangen.
+        if (originalPage.node.Contents) { 
+          
+          // Nur diese eine Seite einbetten, da sie Inhalt hat
+          const embeddedPage = await newPdfDoc.embedPage(originalPage);
+
+          // Skalierungslogik wie vorher
+          const { width, height } = originalPage.getSize();
+          const scale = Math.min(a5Width / width, a5Height / height);
+          const scaledWidth = width * scale;
+          const scaledHeight = height * scale;
+          const x = (a5Width - scaledWidth) / 2;
+          const y = (a5Height - scaledHeight) / 2;
+          
+          // Zeichne die skalierte Originalseite auf die neue A5-Seite
+          newPage.drawPage(embeddedPage, {
+            x,
+            y,
+            width: scaledWidth,
+            height: scaledHeight,
+          });
+        }
+        // else: Wenn die originalPage.node.Contents leer ist,
+        // bleibt die 'newPage' einfach leer. Kein Absturz mehr.
+      }
+      // --- ENDE KORREKTUR ---
+
+
+      // 6. Leere A5-Seiten hinzufügen (wie vorher)
       for (let i = 0; i < pagesToAdd; i++) {
         newPdfDoc.addPage(PageSizes.A5);
       }
@@ -185,8 +194,7 @@ function App() {
 
     } catch (err) {
       console.error(err);
-      // Dieser Block fängt jetzt den "missing Contents"-Fehler ab,
-      // ODER einen anderen Ladefehler.
+      // Dieser Block fängt jetzt alle anderen Fehler ab
       setError('Fehler bei der PDF-Verarbeitung. Die Datei ist möglicherweise beschädigt oder das Format wird nicht unterstützt.');
     } finally {
       setProcessing(false);
