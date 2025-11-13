@@ -1,3 +1,85 @@
+/* Beibehaltung deiner Root- und Farbstile */
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.6;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 2.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+button:disabled {
+  background-color: #333;
+  color: #777;
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+  button:disabled {
+    background-color: #eee;
+    color: #aaa;
+  }
+}
+
+/* Deine originalen App-Stile */
 #root {
   max-width: 1280px;
   margin: 0 auto;
@@ -5,38 +87,107 @@
   text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
 .card {
   padding: 2em;
+  border: 1px solid #555;
+  border-radius: 12px;
+  margin-top: 2rem;
+  background-color: #1e1e1e;
+}
+
+@media (prefers-color-scheme: light) {
+  .card {
+    background-color: #fdfdfd;
+    border: 1px solid #ddd;
+  }
 }
 
 .read-the-docs {
   color: #888;
+}
+
+/* --- NEUE STILE für die App --- */
+
+/* Versteckt das Standard-Input-Feld */
+input[type="file"] {
+  display: none;
+}
+
+/* Style für das "Label", das wie ein Button aussieht */
+.file-label {
+  display: inline-block;
+  padding: 0.8em 1.5em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  border: 1px solid #555;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+.file-label:hover {
+  border-color: #646cff;
+}
+
+@media (prefers-color-scheme: light) {
+  .file-label {
+    background-color: #f9f9f9;
+    border-color: #ccc;
+  }
+}
+
+/* Fehlermeldung */
+.error-message {
+  color: #ff6b6b;
+  font-weight: bold;
+  margin-top: 1rem;
+}
+
+/* Info-Box für Seitenzahlen */
+.info-box {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  display: inline-block;
+  text-align: left;
+}
+
+@media (prefers-color-scheme: light) {
+  .info-box {
+    background-color: #f9f9f9;
+    border-color: #ddd;
+  }
+}
+
+.info-box p {
+  margin: 0.3em 0;
+}
+
+/* Download-Button */
+.download-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px dashed #555;
+}
+
+.download-button {
+  display: inline-block;
+  padding: 0.8em 2em;
+  font-size: 1.1em;
+  font-weight: 700;
+  color: #fff;
+  background-color: #3e8e41; /* Grüner Button */
+  border: none;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background-color 0.25s;
+}
+
+.download-button:hover {
+  background-color: #4caf50;
+  color: #fff;
 }
