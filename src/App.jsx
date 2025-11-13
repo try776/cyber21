@@ -1,6 +1,5 @@
-import { useState } from 'react';
-import { PDFDocument, PageSizes } from 'pdf-lib';
-import './App.css';
+import { useState, useEffect } from 'react';
+import './App.css'; // Importiert die separate CSS-Datei
 
 function App() {
   const [file, setFile] = useState(null);
@@ -8,6 +7,51 @@ function App() {
   const [downloadUrl, setDownloadUrl] = useState(null);
   const [error, setError] = useState(null);
   const [pageInfo, setPageInfo] = useState({ original: 0, added: 0 });
+  
+  // Neuer Status, um zu prüfen, ob pdf-lib geladen ist
+  const [isPdfLibLoaded, setIsPdfLibLoaded] = useState(false);
+
+  // Effekt zum dynamischen Laden der pdf-lib-Bibliothek von einem CDN
+  useEffect(() => {
+    const scriptId = 'pdf-lib-script';
+    
+    // Check if library is already available
+    if (window.PDFLib) {
+      setIsPdfLibLoaded(true);
+      return;
+    }
+
+    // Check if script is *already* in the DOM
+    let script = document.getElementById(scriptId);
+    
+    if (!script) {
+      // If not, create and append it
+      script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+      script.async = true;
+      document.body.appendChild(script);
+    }
+
+    // Define the load/error handlers
+    const handleLoad = () => {
+      setIsPdfLibLoaded(true);
+    };
+    const handleError = () => {
+      setError('Fehler beim Laden der PDF-Bibliothek. Bitte versuche, die Seite neu zu laden.');
+    };
+
+    // Add event listeners to the script element
+    script.addEventListener('load', handleLoad);
+    script.addEventListener('error', handleError);
+
+    // Cleanup function to remove listeners when component unmounts
+    return () => {
+      script.removeEventListener('load', handleLoad);
+      script.removeEventListener('error', handleError);
+    };
+
+  }, []); // Leeres Array, damit es nur einmal ausgeführt wird
 
   /**
    * Wird aufgerufen, wenn der Benutzer eine Datei auswählt.
@@ -32,59 +76,123 @@ function App() {
    * Verarbeitet das ausgewählte PDF.
    */
   const handleProcessPDF = async () => {
-    if (!file) return;
+    // Prüfen, ob die Bibliothek geladen ist
+    if (!file || !isPdfLibLoaded) return;
 
     setProcessing(true);
     setDownloadUrl(null);
     setError(null);
     setPageInfo({ original: 0, added: 0 });
 
+    const { PDFDocument, PageSizes } = window.PDFLib;
+    
+    if (!PDFDocument || !PageSizes) {
+        setError('PDF-Bibliothek konnte nicht geladen werden.');
+        setProcessing(false);
+        return;
+    }
+
     try {
       // 1. Datei als ArrayBuffer laden
       const arrayBuffer = await file.arrayBuffer();
 
-      // 2. PDF mit pdf-lib laden
+      // 2. Original-PDF mit pdf-lib laden
       const pdfDoc = await PDFDocument.load(arrayBuffer);
 
-      // 3. Seitenzahl prüfen und benötigte Seiten berechnen
-      const originalPageCount = pdfDoc.getPageCount();
+      // --- KORRIGIERTER FORMULAR-SCHRITT ---
+      const form = pdfDoc.getForm();
+
+      // 2a. Prüfen auf XFA (nicht unterstützt)
+      if (form.hasXFA()) {
+        setError('Fehler: Die PDF-Datei ist ein XFA-Formular (dynamisch) und wird nicht unterstützt. Bitte drucken Sie sie z.B. über den Browser "als PDF", um sie umzuwandeln.');
+        setProcessing(false);
+        return; 
+      }
+
+      // 2b. Versuchen, AcroForm-Felder flachzudrücken
+      try {
+        // Nur ausführen, wenn es überhaupt Felder gibt
+        if (form.getFields().length > 0) {
+            form.flatten();
+        }
+      } catch (flattenError) {
+        // --- WICHTIGE ÄNDERUNG ---
+        // Wenn das Flachdrücken fehlschlägt, ist das ein fataler Fehler.
+        // Wir müssen hier abbrechen, anstatt weiterzumachen.
+        console.error('Fehler beim Flachdrücken des Formulars:', flattenError);
+        setError('Fehler: Das PDF-Formular konnte nicht verarbeitet werden. Es ist möglicherweise beschädigt oder enthält nicht unterstützte Feldtypen.');
+        setProcessing(false);
+        return; // <-- Verarbeitung hier stoppen!
+      }
+      // --- ENDE KORRIGIERTER SCHRITT ---
+
+      const originalPages = pdfDoc.getPages();
+      const originalPageCount = originalPages.length;
+
+      // 3. Neues PDF-Dokument erstellen
+      const newPdfDoc = await PDFDocument.create();
+
+      // 4. Seitenzahl prüfen und benötigte Seiten berechnen
       const remainder = originalPageCount % 4;
       const pagesToAdd = remainder === 0 ? 0 : 4 - remainder;
       
       setPageInfo({ original: originalPageCount, added: pagesToAdd });
 
-      // 4. Bestehende Seiten auf A5 Grösse setzen
-      // A5-Dimensionen in "points" (1/72 Zoll)
+      // 5. Bestehende Seiten auf A5 skalieren
       const a5Width = PageSizes.A5[0];
       const a5Height = PageSizes.A5[1];
 
-      const pages = pdfDoc.getPages();
-      pages.forEach(page => {
-        // Setzt die "MediaBox" der Seite. 
-        // Der Inhalt wird nicht skaliert, aber die Seite selbst hat A5-Masse.
-        page.setSize(a5Width, a5Height);
-      });
+      // Alle Seiten auf einmal in das neue Dokument einbetten
+      const embeddedPages = await newPdfDoc.embedPages(originalPages); 
 
-      // 5. Leere A5-Seiten hinzufügen, falls nötig
-      for (let i = 0; i < pagesToAdd; i++) {
-        pdfDoc.addPage(PageSizes.A5);
+      // Jede eingebettete Seite auf eine neue A5-Seite zeichnen
+      for (let i = 0; i < originalPageCount; i++) {
+        const originalPage = originalPages[i];
+        const embeddedPage = embeddedPages[i];
+        
+        const { width, height } = originalPage.getSize();
+        
+        const scale = Math.min(a5Width / width, a5Height / height);
+        
+        const scaledWidth = width * scale;
+        const scaledHeight = height * scale;
+
+        const x = (a5Width - scaledWidth) / 2;
+        const y = (a5Height - scaledHeight) / 2;
+
+        const newPage = newPdfDoc.addPage(PageSizes.A5);
+        
+        newPage.drawPage(embeddedPage, {
+          x,
+          y,
+          width: scaledWidth,
+          height: scaledHeight,
+        });
       }
 
-      // 6. PDF als Bytes speichern
-      const pdfBytes = await pdfDoc.save();
+      // 6. Leere A5-Seiten hinzufügen
+      for (let i = 0; i < pagesToAdd; i++) {
+        newPdfDoc.addPage(PageSizes.A5);
+      }
 
-      // 7. Download-URL erstellen
+      // 7. Neues PDF als Bytes speichern
+      const pdfBytes = await newPdfDoc.save();
+
+      // 8. Download-URL erstellen
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
 
     } catch (err) {
       console.error(err);
-      setError('Fehler bei der PDF-Verarbeitung. Die Datei ist möglicherweise beschädigt.');
+      // Dieser Block fängt jetzt den "missing Contents"-Fehler ab,
+      // ODER einen anderen Ladefehler.
+      setError('Fehler bei der PDF-Verarbeitung. Die Datei ist möglicherweise beschädigt oder das Format wird nicht unterstützt.');
     } finally {
       setProcessing(false);
     }
   };
+
 
   /**
    * Erzeugt den Dateinamen für den Download.
@@ -106,7 +214,14 @@ function App() {
       </p>
 
       <div className="card">
-        <label htmlFor="file-upload" className="file-label">
+        {!isPdfLibLoaded && !error && (
+            <p><strong>Lade PDF-Bibliothek...</strong></p>
+        )}
+
+        <label 
+          htmlFor="file-upload" 
+          className={`file-label ${!isPdfLibLoaded ? 'disabled-label' : ''}`}
+        >
           {file ? `Datei: ${file.name}` : 'PDF-Datei auswählen'}
         </label>
         <input 
@@ -114,15 +229,15 @@ function App() {
           type="file" 
           accept="application/pdf" 
           onChange={handleFileChange} 
-          disabled={processing}
+          disabled={processing || !isPdfLibLoaded}
         />
 
         <button 
           onClick={handleProcessPDF} 
-          disabled={!file || processing}
+          disabled={!file || processing || !isPdfLibLoaded}
           style={{ marginTop: '1rem' }}
         >
-          {processing ? 'Verarbeite...' : 'PDF verarbeiten'}
+          {processing ? 'Verarbeite...' : (isPdfLibLoaded ? 'PDF verarbeiten' : 'Lade...')}
         </button>
 
         {error && <p className="error-message">{error}</p>}

@@ -1,4 +1,4 @@
-/* Beibehaltung deiner Root- und Farbstile */
+/* Globale Stile (Root, Body, etc.) */
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.6;
@@ -61,7 +61,7 @@ button:disabled {
   cursor: not-allowed;
 }
 
-
+/* Light-Mode Anpassungen */
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
@@ -79,7 +79,7 @@ button:disabled {
   }
 }
 
-/* Deine originalen App-Stile */
+/* App-spezifische Stile */
 #root {
   max-width: 1280px;
   margin: 0 auto;
@@ -106,7 +106,7 @@ button:disabled {
   color: #888;
 }
 
-/* --- NEUE STILE für die App --- */
+/* --- Stile für die App-Komponenten --- */
 
 /* Versteckt das Standard-Input-Feld */
 input[type="file"] {
@@ -131,10 +131,22 @@ input[type="file"] {
   border-color: #646cff;
 }
 
+/* Stil für deaktiviertes Label, während die Bibliothek lädt */
+.file-label.disabled-label {
+  background-color: #333;
+  color: #777;
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
 @media (prefers-color-scheme: light) {
   .file-label {
     background-color: #f9f9f9;
     border-color: #ccc;
+  }
+  .file-label.disabled-label {
+    background-color: #eee;
+    color: #aaa;
   }
 }
 
